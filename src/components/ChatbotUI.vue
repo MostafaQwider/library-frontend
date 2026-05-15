@@ -163,21 +163,19 @@ export default {
       this.isTyping = true;
       this.scroll();
 
-      setTimeout(() => {
-        const q = text.toLowerCase();
-        
-        // Search in fetched FAQs
-        const found = Array.isArray(this.faqs) ? this.faqs.find(f => 
-          f.question.toLowerCase().includes(q) || 
-          q.includes(f.question.toLowerCase())
-        ) : null;
-
+      setTimeout(async () => {
         let res = '';
-        if (found) {
-          res = found.answer;
-        } else {
+        try {
+          const response = await faqService.search(text);
+          if (response.data && response.data.success && response.data.data) {
+            res = response.data.data.answer;
+          } else {
+            throw new Error("No match");
+          }
+        } catch (err) {
           // Fallback logic
-          res = 'نعتذر، لم أفهم سؤالك تماماً. هل تقصد الاستفسار عن المواعيد، الغرامات، أو طريقة الحجز؟';
+          const q = text.toLowerCase();
+          res = 'نعتذر، لم أجد إجابة دقيقة لسؤالك في قاعدة المعرفة. يرجى محاولة صياغة السؤال بطريقة أخرى، أو التواصل مع أمين المكتبة مباشرة.';
           if (q.includes('مدة') || q.includes('استعارة')) res = 'تسمح المكتبة باستعارة الكتاب لمدة 14 يوماً قابلة للتجديد مرة واحدة عبر الموقع.';
           else if (q.includes('غرامة') || q.includes('تأخير')) res = 'غرامة التأخير هي 100 ل.س عن كل يوم تأخير، يرجى الالتزام بالمواعيد.';
           else if (q.includes('حجز') || q.includes('كيف')) res = 'يمكنك حجز الكتاب من صفحة البحث، ابحث عن الكتاب ثم اضغط "احجز الآن".';
@@ -187,7 +185,7 @@ export default {
         this.messages.push({ text: res, sender: 'bot', time: this.now() });
         this.isTyping = false;
         this.scroll();
-      }, 1400);
+      }, 500);
     },
     scroll() {
       this.$nextTick(() => {

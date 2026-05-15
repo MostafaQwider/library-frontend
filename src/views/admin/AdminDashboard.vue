@@ -434,6 +434,43 @@
           </div>
         </div>
 
+        <!-- ===== إدارة الأسئلة الشائعة ===== -->
+        <div v-if="activeTab === 'faq'">
+          <div class="page-header">
+            <h2 class="page-title"><i class="fas fa-question-circle"></i> إدارة الأسئلة الشائعة</h2>
+            <button class="add-btn" @click="openAddFaq">
+              <i class="fas fa-plus"></i> إضافة سؤال
+            </button>
+          </div>
+
+          <div class="filter-bar">
+            <div class="search-mini">
+              <i class="fas fa-search"></i>
+              <input v-model="faqSearch" placeholder="ابحث عن سؤال..." />
+            </div>
+          </div>
+
+          <div class="section-card" style="padding:16px;">
+            <table class="data-table">
+              <thead>
+                <tr><th>السؤال</th><th>الجواب</th><th>إجراءات</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in filteredFaqs" :key="row.id">
+                  <td class="bold-cell">{{ row.question }}</td>
+                  <td class="text-small">{{ row.answer }}</td>
+                  <td>
+                    <div class="action-btns">
+                      <button class="act-edit" @click="openEditFaq(row)"><i class="fas fa-edit"></i></button>
+                      <button class="act-delete" @click="deleteFaqAction(row)"><i class="fas fa-trash"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -964,6 +1001,33 @@
       </div>
     </div>
 
+    <!-- ===== Modal: FAQ ===== -->
+    <div v-if="showFaqModal" class="modal-overlay" @click.self="showFaqModal = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h3><i class="fas fa-question-circle"></i> {{ editingFaq.id ? 'تعديل السؤال' : 'إضافة سؤال جديد' }}</h3>
+          <button class="modal-close" @click="showFaqModal = false"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group full">
+            <label>السؤال *</label>
+            <input v-model="editingFaq.question" type="text" placeholder="أدخل السؤال هنا..." />
+          </div>
+          <div class="form-group full">
+            <label>الجواب *</label>
+            <textarea v-model="editingFaq.answer" rows="4" style="padding: 10px 14px; border: 2px solid #e8ecf0; border-radius: 10px; font-family: 'Tajawal', sans-serif; font-size: 0.9rem; color: #2c3e50; outline: none; transition: 0.2s; background: white;" placeholder="أدخل الجواب هنا..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="showFaqModal = false">إلغاء</button>
+          <button class="btn-save" @click="saveFaq" :disabled="submittingFaq">
+            <i class="fas fa-save"></i>
+            {{ submittingFaq ? 'جاري الحفظ...' : 'حفظ' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -975,6 +1039,7 @@ import { adminService } from '../../api/adminService'
 import { bookService } from '../../api/bookService'
 import { loanService } from '../../api/loanService'
 import { userService } from '../../api/userService'
+import { faqService } from '../../api/faqService'
 import { listFromResponse } from '../../api/responseUtils'
 
 export default {
@@ -1098,6 +1163,7 @@ export default {
     const publishers = ref([])
     const authors = ref([])
     const locations = ref([])
+    const faqs = ref([])
 
     // Filters
     const bookSearch = ref('')
@@ -1110,6 +1176,14 @@ export default {
     const publisherSearch = ref('')
     const authorSearch = ref('')
     const locationSearch = ref('')
+    const faqSearch = ref('')
+    const showFaqModal = ref(false)
+    const submittingFaq = ref(false)
+    const editingFaq = reactive({
+      id: null,
+      question: '',
+      answer: ''
+    })
 
     // New Data Objects
     const newBook = reactive({
@@ -1191,6 +1265,7 @@ export default {
       { key: 'loans',      label: 'الاستعارات',    icon: 'fas fa-exchange-alt' },
       { key: 'users',      label: 'المستخدمون',    icon: 'fas fa-users' },
       { key: 'fines',      label: 'الغرامات',      icon: 'fas fa-coins' },
+      { key: 'faq',        label: 'الأسئلة الشائعة',icon: 'fas fa-question-circle' },
     ]
 
     const refreshBookLookups = async () => {
@@ -1258,6 +1333,9 @@ export default {
 
         const finesRes = await adminService.getFines(listParams)
         fines.value = listFromResponse(finesRes)
+
+        const faqsRes = await faqService.getAll()
+        faqs.value = listFromResponse(faqsRes)
 
         recomputeStats()
         await refreshBookLookups()
@@ -1335,6 +1413,11 @@ export default {
       })
     })
 
+    const filteredFaqs = computed(() => {
+      const q = faqSearch.value.trim().toLowerCase()
+      return (faqs.value || []).filter(f => !q || String(f.question || '').toLowerCase().includes(q) || String(f.answer || '').toLowerCase().includes(q))
+    })
+
     const totalPendingFines = computed(() => {
       return (fines.value || []).filter(f => f.status === 'UNPAID').reduce((s, f) => s + f.amount, 0).toLocaleString('ar')
     })
@@ -1342,6 +1425,53 @@ export default {
     const recentLoans = computed(() => {
       return (loans.value || []).slice(0, 5)
     })
+
+    // FAQ Actions
+    const openAddFaq = () => {
+      Object.assign(editingFaq, { id: null, question: '', answer: '' })
+      showFaqModal.value = true
+    }
+
+    const openEditFaq = (faq) => {
+      Object.assign(editingFaq, { ...faq })
+      showFaqModal.value = true
+    }
+
+    const saveFaq = async () => {
+      if (!editingFaq.question || !editingFaq.answer) {
+        showToast('error', 'خطأ', 'يرجى إدخال السؤال والجواب')
+        return
+      }
+      submittingFaq.value = true
+      try {
+        if (editingFaq.id) {
+          await faqService.update(editingFaq.id, editingFaq)
+          showToast('success', 'نجاح', 'تم تحديث السؤال بنجاح')
+        } else {
+          await faqService.create(editingFaq)
+          showToast('success', 'نجاح', 'تم إضافة السؤال بنجاح')
+        }
+        showFaqModal.value = false
+        const faqsRes = await faqService.getAll()
+        faqs.value = listFromResponse(faqsRes)
+      } catch (err) {
+        showToast('error', 'خطأ', err.response?.data?.message || err.message)
+      } finally {
+        submittingFaq.value = false
+      }
+    }
+
+    const deleteFaqAction = async (faq) => {
+      if (!confirm('هل أنت متأكد من حذف هذا السؤال؟')) return
+      try {
+        await faqService.delete(faq.id)
+        showToast('success', 'نجاح', 'تم الحذف بنجاح')
+        const faqsRes = await faqService.getAll()
+        faqs.value = listFromResponse(faqsRes)
+      } catch (err) {
+        showToast('error', 'خطأ', 'فشل الحذف')
+      }
+    }
 
     // Actions
     const logout = () => {
@@ -1838,14 +1968,14 @@ export default {
       activeTab, adminName, today, showAddBook, showNewLoan, showEditBook, showLoanDetails, selectedLoan,
       showAddUser, newUserForm, addUserLoading, addUserError, saveNewUser, openAddUserStub,
       wizardStep, wizardLoading, editBookLoading, editingBook, editWizardStep,
-      stats, books, loans, users, fines,
+      stats, books, loans, users, fines, faqs,
       categories, publishers, authors, locations,
       bookSearch, bookFilter, loanSearch, loanFilter, userSearch, userFilter,
-      categorySearch, publisherSearch, authorSearch, locationSearch,
+      categorySearch, publisherSearch, authorSearch, locationSearch, faqSearch,
       newBook, newLoan, menuItems, logout,
       quickCategoryName, quickPublisherName, quickAuthorName, quickLocation, quickAddBusy,
       filteredAdminBooks, filteredLoans, filteredUsers, totalPendingFines, recentLoans,
-      filteredCategories, filteredPublishers, filteredAuthors, filteredLocations,
+      filteredCategories, filteredPublishers, filteredAuthors, filteredLocations, filteredFaqs,
       saveBookWizard, deleteBook, returnBookAction, toggleUserStatus, markFinePaid,
       confirmUserDeposit, addCategoryQuick, addPublisherQuick, addAuthorQuick, addLocationQuick,
       handleCoverFileChange, clearCoverImage, handleEditCoverFileChange,
@@ -1854,6 +1984,7 @@ export default {
       editBook, saveEditBook, editUser, saveLoan, viewLoan,
       addCopyRow, removeCopyRow, addEditCopyRow, removeEditCopyRow, fetchData,
       newFine, submittingFine, submitFine,
+      showFaqModal, submittingFaq, editingFaq, openAddFaq, openEditFaq, saveFaq, deleteFaqAction,
       userSearchInModal, selectedUserInModal, showUserDropdown,
       bookSearchInModal, selectedBookInModal, showBookDropdown,
       filteredUsersForModal, filteredBooksForModal,

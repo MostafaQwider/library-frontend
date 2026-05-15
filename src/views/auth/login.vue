@@ -1,13 +1,10 @@
 <template>
   <div class="login-wrapper" dir="rtl">
 
-    <!-- الجانب الأيمن - الصورة والمعلومات -->
     <div class="left-panel">
       <div class="panel-overlay"></div>
       <div class="panel-content">
-        <div class="panel-logo">
-          <i class="fas fa-university"></i>
-        </div>
+        <div class="panel-logo"><i class="fas fa-university"></i></div>
         <h1 class="panel-title">مكتبة جامعة قاسيون</h1>
         <p class="panel-subtitle">بوابتك نحو المعرفة والبحث العلمي</p>
         <div class="panel-stats">
@@ -25,15 +22,34 @@
       </div>
     </div>
 
-    <!-- الجانب الأيسر - نموذج الدخول -->
     <div class="right-panel">
       <div class="login-box">
         <div class="login-header">
-          <div class="avatar-ring">
-            <i class="fas fa-user-graduate"></i>
-          </div>
+          <div class="avatar-ring"><i class="fas fa-user-graduate"></i></div>
           <h2>المعرفة تبدأ بصفحة</h2>
           <p>سجّل دخولك للوصول إلى مكتبتك</p>
+        </div>
+
+        <!-- بانر الحظر -->
+        <div v-if="isLocked" class="lockout-banner">
+          <div class="lockout-icon"><i class="fas fa-shield-alt"></i></div>
+          <div class="lockout-content">
+            <div class="lockout-title">تم تجاوز عدد المحاولات المسموحة</div>
+            <div class="lockout-sub">يرجى الانتظار قبل المحاولة مجدداً</div>
+            <div class="lockout-timer">
+              <i class="fas fa-clock"></i>
+              <span>{{ lockoutCountdown }} ثانية</span>
+            </div>
+            <div class="lockout-progress-bar">
+              <div class="lockout-progress-fill" :style="{ width: lockoutProgressWidth + '%' }"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- محاولات متبقية -->
+        <div v-if="!isLocked && failedAttempts > 0" class="attempts-warning">
+          <i class="fas fa-exclamation-triangle"></i>
+          المحاولات المتبقية: <strong>{{ 3 - failedAttempts }}</strong> من 3
         </div>
 
         <form @submit.prevent="handleLogin" class="login-form">
@@ -48,6 +64,7 @@
                 placeholder="example@univ.edu.sy"
                 @input="validateEmail"
                 autocomplete="off"
+                :disabled="isLocked"
               />
             </div>
             <transition name="err">
@@ -64,8 +81,9 @@
                 v-model="password"
                 placeholder="••••••••"
                 @input="validatePassword"
+                :disabled="isLocked"
               />
-              <button type="button" class="eye-btn" @click="showPass = !showPass">
+              <button type="button" class="eye-btn" @click="showPass = !showPass" :disabled="isLocked">
                 <i :class="!showPass ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
               </button>
             </div>
@@ -76,14 +94,15 @@
 
           <div class="form-options">
             <label class="remember-me">
-              <input type="checkbox" v-model="rememberMe" />
+              <input type="checkbox" v-model="rememberMe" :disabled="isLocked" />
               <span>تذكرني</span>
             </label>
             <router-link to="/register" class="forgot-link">إنشاء حساب بدلاً من ذلك</router-link>
           </div>
 
-          <button type="submit" :disabled="!isFormValid || isLoading" class="login-btn" :class="{ 'loading': isLoading }">
-            <span v-if="!isLoading"><i class="fas fa-sign-in-alt"></i> دخول للمكتبة</span>
+          <button type="submit" :disabled="!isFormValid || isLoading || isLocked" class="login-btn" :class="{ 'loading': isLoading }">
+            <span v-if="isLocked"><i class="fas fa-lock"></i> محظور مؤقتاً</span>
+            <span v-else-if="!isLoading"><i class="fas fa-sign-in-alt"></i> دخول للمكتبة</span>
             <span v-else class="dots"><span></span><span></span><span></span></span>
           </button>
 
@@ -104,6 +123,9 @@
 <script>
 import { useAuthStore } from '../../store/authStore'
 
+const MAX_ATTEMPTS = 3
+const LOCKOUT_SECONDS = 60
+
 export default {
   data() {
     return {
@@ -115,6 +137,12 @@ export default {
       showPass: false,
       rememberMe: false,
       isLoading: false,
+      // محاولات تسجيل الدخول
+      failedAttempts: 0,
+      isLocked: false,
+      lockoutCountdown: LOCKOUT_SECONDS,
+      lockoutProgressWidth: 100,
+      _lockoutTimer: null,
     };
   },
   computed: {
@@ -123,33 +151,57 @@ export default {
       return emailPattern.test(this.email) && this.password.length >= 6;
     }
   },
+  beforeUnmount() {
+    if (this._lockoutTimer) clearInterval(this._lockoutTimer)
+  },
   methods: {
     validateEmail() {
       const emailPattern = /^[^\@\s]+@[^\@\s]+\.[^\@\s]+$/;
       this.emailError = !emailPattern.test(this.email) ? 'يرجى إدخال بريد إلكتروني صحيح' : '';
     },
     validatePassword() {
-      if (this.password.length < 6) {
-        this.passwordError = 'كلمة المرور قصيرة جداً (6 أحرف على الأقل)';
-      } else {
-        this.passwordError = '';
-      }
+      this.passwordError = this.password.length < 6 ? 'كلمة المرور قصيرة جداً (6 أحرف على الأقل)' : '';
+    },
+    startLockout() {
+      this.isLocked = true
+      this.lockoutCountdown = LOCKOUT_SECONDS
+      this.lockoutProgressWidth = 100
+      const total = LOCKOUT_SECONDS
+      this._lockoutTimer = setInterval(() => {
+        this.lockoutCountdown--
+        this.lockoutProgressWidth = Math.round((this.lockoutCountdown / total) * 100)
+        if (this.lockoutCountdown <= 0) {
+          clearInterval(this._lockoutTimer)
+          this.isLocked = false
+          this.failedAttempts = 0
+          this.apiError = ''
+          this.lockoutProgressWidth = 100
+        }
+      }, 1000)
     },
     async handleLogin() {
-      if (!this.isFormValid) return;
+      if (!this.isFormValid || this.isLocked) return;
       this.isLoading = true;
       this.apiError = '';
       const authStore = useAuthStore();
       const result = await authStore.login(this.email, this.password);
       this.isLoading = false;
       if (result.success) {
+        this.failedAttempts = 0
         if (authStore.isAdmin) {
           this.$router.push('/dashboard');
         } else {
           this.$router.push('/search');
         }
       } else {
-        this.apiError = result.message;
+        this.failedAttempts++
+        const remaining = MAX_ATTEMPTS - this.failedAttempts
+        if (this.failedAttempts >= MAX_ATTEMPTS) {
+          this.apiError = ''
+          this.startLockout()
+        } else {
+          this.apiError = result.message + ` (تبقّت ${remaining} محاولة)`
+        }
       }
     }
   }
@@ -162,352 +214,118 @@ export default {
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-.login-wrapper {
-  display: flex;
-  height: 100vh;
-  font-family: 'Tajawal', sans-serif;
-  direction: rtl;
-  overflow: hidden;
-}
+.login-wrapper { display: flex; height: 100vh; font-family: 'Tajawal', sans-serif; direction: rtl; overflow: hidden; }
 
-/* ===== LEFT PANEL ===== */
 .left-panel {
   flex: 1.1;
   background: url('https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1200&fit=crop') center/cover no-repeat;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow-y: auto;
+  position: relative; display: flex; align-items: center; justify-content: center; overflow-y: auto;
 }
 
-.panel-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(145deg, rgba(15,32,65,0.92) 0%, rgba(26,82,130,0.85) 100%);
-}
-
-.panel-content {
-  position: relative;
-  z-index: 2;
-  text-align: center;
-  color: white;
-  padding: 40px;
-}
-
-.panel-logo {
-  width: 90px;
-  height: 90px;
-  background: rgba(255,255,255,0.1);
-  border: 2px solid rgba(255,255,255,0.25);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.2rem;
-  margin: 0 auto 25px;
-  backdrop-filter: blur(10px);
-  animation: pulse 3s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.2); }
-  50% { box-shadow: 0 0 0 20px rgba(255,255,255,0); }
-}
-
-.panel-title {
-  font-size: 2rem;
-  font-weight: 800;
-  margin-bottom: 10px;
-  letter-spacing: 1px;
-}
-
-.panel-subtitle {
-  font-size: 1rem;
-  opacity: 0.75;
-  margin-bottom: 50px;
-  font-weight: 300;
-}
-
-.panel-stats {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 25px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 20px;
-  padding: 20px 35px;
-  backdrop-filter: blur(10px);
-}
-
+.panel-overlay { position: absolute; inset: 0; background: linear-gradient(145deg, rgba(15,32,65,0.92) 0%, rgba(26,82,130,0.85) 100%); }
+.panel-content { position: relative; z-index: 2; text-align: center; color: white; padding: 40px; }
+.panel-logo { width: 90px; height: 90px; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; margin: 0 auto 25px; backdrop-filter: blur(10px); animation: pulse 3s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.2); } 50% { box-shadow: 0 0 0 20px rgba(255,255,255,0); } }
+.panel-title { font-size: 2rem; font-weight: 800; margin-bottom: 10px; letter-spacing: 1px; }
+.panel-subtitle { font-size: 1rem; opacity: 0.75; margin-bottom: 50px; font-weight: 300; }
+.panel-stats { display: flex; align-items: center; justify-content: center; gap: 25px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 20px 35px; backdrop-filter: blur(10px); }
 .stat { text-align: center; }
 .num { display: block; font-size: 1.4rem; font-weight: 800; color: #5dade2; }
 .lbl { display: block; font-size: 0.75rem; opacity: 0.7; margin-top: 3px; }
 .stat-divider { width: 1px; height: 40px; background: rgba(255,255,255,0.2); }
-
-/* كتب طائرة */
 .floating-books { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
-.book-float {
-  position: absolute;
-  color: rgba(255,255,255,0.06);
-  font-size: 5rem;
-  animation: floatAnim 8s ease-in-out infinite;
-}
+.book-float { position: absolute; color: rgba(255,255,255,0.06); font-size: 5rem; animation: floatAnim 8s ease-in-out infinite; }
 .b1 { top: 10%; right: 10%; animation-delay: 0s; font-size: 4rem; }
 .b2 { bottom: 20%; left: 8%; animation-delay: 2.5s; font-size: 6rem; }
 .b3 { top: 50%; right: 5%; animation-delay: 5s; font-size: 3.5rem; }
+@keyframes floatAnim { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-25px) rotate(8deg); } }
 
-@keyframes floatAnim {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-25px) rotate(8deg); }
-}
+.right-panel { flex: 0.9; background: #f8fafc; display: flex; align-items: center; justify-content: center; padding: 40px 30px; overflow-y: auto; }
+.login-box { width: 100%; max-width: 420px; margin: auto; }
+.login-header { text-align: center; margin-bottom: 25px; }
+.avatar-ring { width: 75px; height: 75px; background: linear-gradient(135deg, #1a5276, #2e86c1); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; color: white; margin: 0 auto 18px; box-shadow: 0 8px 25px rgba(46,134,193,0.35); }
+.login-header h2 { font-size: 1.6rem; font-weight: 800; color: #1a2940; margin-bottom: 6px; }
+.login-header p { color: #95a5a6; font-size: 0.9rem; }
 
-/* ===== RIGHT PANEL ===== */
-.right-panel {
-  flex: 0.9;
-  background: #f8fafc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 30px;
-  overflow-y: auto;
+/* ===== LOCKOUT BANNER ===== */
+.lockout-banner {
+  display: flex; align-items: center; gap: 16px;
+  background: linear-gradient(135deg, #fdf0f0, #fef8f8);
+  border: 2px solid #fadbd8;
+  border-radius: 16px; padding: 18px; margin-bottom: 20px;
+  animation: shakeIn 0.4s ease;
 }
+@keyframes shakeIn {
+  0% { transform: translateX(10px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+.lockout-icon {
+  width: 50px; height: 50px; border-radius: 50%;
+  background: #e74c3c; display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 1.3rem; flex-shrink: 0;
+  animation: pulse-red 1.5s ease-in-out infinite;
+}
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.3); }
+  50% { box-shadow: 0 0 0 10px rgba(231,76,60,0); }
+}
+.lockout-content { flex: 1; }
+.lockout-title { font-size: 0.92rem; font-weight: 700; color: #c0392b; margin-bottom: 3px; }
+.lockout-sub { font-size: 0.8rem; color: #e74c3c; margin-bottom: 10px; opacity: 0.8; }
+.lockout-timer { display: flex; align-items: center; gap: 8px; font-size: 1.1rem; font-weight: 800; color: #c0392b; margin-bottom: 8px; }
+.lockout-progress-bar { height: 6px; background: #fadbd8; border-radius: 3px; overflow: hidden; }
+.lockout-progress-fill { height: 100%; background: linear-gradient(90deg, #e74c3c, #c0392b); border-radius: 3px; transition: width 1s linear; }
 
-.login-box {
-  width: 100%;
-  max-width: 420px;
-  margin: auto;
+/* ===== ATTEMPTS WARNING ===== */
+.attempts-warning {
+  background: #fef9e7; border: 1px solid #f9ca24;
+  color: #d68910; padding: 10px 14px; border-radius: 10px;
+  font-size: 0.85rem; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
 }
-
-.login-header {
-  text-align: center;
-  margin-bottom: 35px;
-}
-
-.avatar-ring {
-  width: 75px;
-  height: 75px;
-  background: linear-gradient(135deg, #1a5276, #2e86c1);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.8rem;
-  color: white;
-  margin: 0 auto 18px;
-  box-shadow: 0 8px 25px rgba(46,134,193,0.35);
-}
-
-.login-header h2 {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #1a2940;
-  margin-bottom: 6px;
-}
-
-.login-header p {
-  color: #95a5a6;
-  font-size: 0.9rem;
-}
+.attempts-warning strong { font-size: 1rem; }
 
 /* ===== FORM ===== */
-.field-group {
-  margin-bottom: 20px;
-}
-
-.field-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: #2c3e50;
-}
-
-.input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-icon {
-  position: absolute;
-  right: 15px;
-  color: #aab7c4;
-  font-size: 0.9rem;
-  z-index: 1;
-}
-
-.input-wrapper input {
-  width: 100%;
-  padding: 13px 42px 13px 45px;
-  border: 2px solid #e8ecf0;
-  border-radius: 12px;
-  font-family: 'Tajawal', sans-serif;
-  font-size: 0.95rem;
-  background: white;
-  transition: 0.25s;
-  color: #2c3e50;
-  outline: none;
-}
-
-.input-wrapper input:focus {
-  border-color: #2e86c1;
-  box-shadow: 0 0 0 4px rgba(46,134,193,0.1);
-}
-
+.field-group { margin-bottom: 20px; }
+.field-group label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; color: #2c3e50; }
+.input-wrapper { position: relative; display: flex; align-items: center; }
+.input-icon { position: absolute; right: 15px; color: #aab7c4; font-size: 0.9rem; z-index: 1; }
+.input-wrapper input { width: 100%; padding: 13px 42px 13px 45px; border: 2px solid #e8ecf0; border-radius: 12px; font-family: 'Tajawal', sans-serif; font-size: 0.95rem; background: white; transition: 0.25s; color: #2c3e50; outline: none; }
+.input-wrapper input:focus { border-color: #2e86c1; box-shadow: 0 0 0 4px rgba(46,134,193,0.1); }
+.input-wrapper input:disabled { background: #f8fafc; color: #bdc3c7; cursor: not-allowed; }
 .has-error .input-wrapper input { border-color: #e74c3c; }
-
-.eye-btn {
-  position: absolute;
-  left: 14px;
-  background: none;
-  border: none;
-  color: #aab7c4;
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 4px;
-  transition: 0.2s;
-}
+.eye-btn { position: absolute; left: 14px; background: none; border: none; color: #aab7c4; cursor: pointer; font-size: 0.9rem; padding: 4px; transition: 0.2s; }
 .eye-btn:hover { color: #2e86c1; }
-
-.err-msg {
-  display: block;
-  color: #e74c3c;
-  font-size: 0.78rem;
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.form-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 25px;
-}
-
-.remember-me {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.88rem;
-  color: #7f8c8d;
-  cursor: pointer;
-}
-
+.err-msg { display: flex; align-items: center; gap: 5px; color: #e74c3c; font-size: 0.78rem; margin-top: 6px; }
+.form-options { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+.remember-me { display: flex; align-items: center; gap: 7px; font-size: 0.88rem; color: #7f8c8d; cursor: pointer; }
 .remember-me input { accent-color: #2e86c1; }
-
-.forgot-link {
-  font-size: 0.88rem;
-  color: #2e86c1;
-  text-decoration: none;
-  font-weight: 500;
-}
-
+.forgot-link { font-size: 0.88rem; color: #2e86c1; text-decoration: none; font-weight: 500; }
 .forgot-link:hover { text-decoration: underline; }
 
-/* زر الدخول */
-.login-btn {
-  width: 100%;
-  padding: 14px;
-  background: linear-gradient(135deg, #1a5276, #2e86c1);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  font-family: 'Tajawal', sans-serif;
-  cursor: pointer;
-  transition: 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  letter-spacing: 0.5px;
-  box-shadow: 0 6px 20px rgba(46,134,193,0.3);
-}
+.login-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #1a5276, #2e86c1); color: white; border: none; border-radius: 12px; font-size: 1.05rem; font-weight: 700; font-family: 'Tajawal', sans-serif; cursor: pointer; transition: 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 6px 20px rgba(46,134,193,0.3); }
+.login-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(46,134,193,0.4); }
+.login-btn:disabled { background: linear-gradient(135deg, #bdc3c7, #95a5a6); cursor: not-allowed; box-shadow: none; transform: none; }
 
-.login-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(46,134,193,0.4);
-}
-
-.login-btn:disabled {
-  background: linear-gradient(135deg, #bdc3c7, #95a5a6);
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
-
-/* نقاط التحميل */
 .dots { display: flex; gap: 5px; align-items: center; }
-.dots span {
-  width: 7px; height: 7px;
-  background: white;
-  border-radius: 50%;
-  animation: dotBounce 1.2s infinite ease-in-out;
-}
+.dots span { width: 7px; height: 7px; background: white; border-radius: 50%; animation: dotBounce 1.2s infinite ease-in-out; }
 .dots span:nth-child(2) { animation-delay: 0.2s; }
 .dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes dotBounce {
-  0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
-  40% { transform: scale(1); opacity: 1; }
-}
+@keyframes dotBounce { 0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
 
-.divider {
-  text-align: center;
-  margin: 22px 0 15px;
-  position: relative;
-  color: #bdc3c7;
-  font-size: 0.85rem;
-}
-.divider::before, .divider::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  width: 42%;
-  height: 1px;
-  background: #e8ecf0;
-}
+.divider { text-align: center; margin: 22px 0 15px; position: relative; color: #bdc3c7; font-size: 0.85rem; }
+.divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 42%; height: 1px; background: #e8ecf0; }
 .divider::before { right: 0; }
 .divider::after { left: 0; }
 
-.support-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #7f8c8d;
-  text-decoration: none;
-  font-size: 0.9rem;
-  padding: 11px;
-  border: 2px solid #e8ecf0;
-  border-radius: 12px;
-  transition: 0.2s;
-  font-weight: 500;
-}
+.support-link { display: flex; align-items: center; justify-content: center; gap: 8px; color: #7f8c8d; text-decoration: none; font-size: 0.9rem; padding: 11px; border: 2px solid #e8ecf0; border-radius: 12px; transition: 0.2s; font-weight: 500; }
 .support-link:hover { border-color: #2e86c1; color: #2e86c1; background: #f0f8ff; }
 
-.api-error {
-  background: #fdf0f0;
-  color: #e74c3c;
-  padding: 12px;
-  border-radius: 10px;
-  margin-top: 15px;
-  font-size: 0.85rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #fadbd8;
-}
+.api-error { background: #fdf0f0; color: #e74c3c; padding: 12px; border-radius: 10px; margin-top: 15px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; border: 1px solid #fadbd8; }
 
-/* أنيميشن الخطأ */
 .err-enter-active, .err-leave-active { transition: all 0.3s ease; }
 .err-enter, .err-leave-to { opacity: 0; transform: translateY(-5px); }
 
-/* Responsive */
 @media (max-width: 768px) {
   .left-panel { display: none; }
   .right-panel { flex: 1; background: white; }

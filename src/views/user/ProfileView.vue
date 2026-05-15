@@ -10,7 +10,7 @@
             <button class="edit-avatar-btn"><i class="fas fa-camera"></i></button>
           </div>
           <h2>{{ user.full_name }}</h2>
-          <span class="user-role">طالب بجامعة قاسيون - {{ user.university_number }}</span>
+          <span class="user-role">{{ roleLabel }} - {{ isStudent ? user.university_number : user.university_number }}</span>
         </div>
       </div>
 
@@ -27,13 +27,24 @@
               </div>
             </div>
 
-            <div class="input-wrapper">
+            <!-- الرقم الجامعي: فقط للطالب -->
+            <div v-if="isStudent" class="input-wrapper">
               <label>الرقم الجامعي</label>
               <div class="input-with-icon disabled">
                 <i class="fas fa-id-badge"></i>
                 <input type="text" v-model="user.university_number" disabled />
               </div>
               <small class="hint-text">رقمك الجامعي الفريد</small>
+            </div>
+
+            <!-- رقم الهوية: للموظف/الدكتور -->
+            <div v-if="!isStudent" class="input-wrapper">
+              <label>رقم الهوية</label>
+              <div class="input-with-icon disabled staff-id">
+                <i class="fas fa-hashtag"></i>
+                <input type="text" :value="user.university_number" disabled />
+              </div>
+              <small class="hint-text">رقم هويتك الوظيفي</small>
             </div>
 
             <div class="input-wrapper">
@@ -103,6 +114,7 @@ export default {
       full_name: '',
       email: '',
       university_number: '',
+      role: '',
       newPassword: '',
       deposit: null
     })
@@ -120,6 +132,7 @@ export default {
           full_name: data.full_name,
           email: data.email,
           university_number: data.university_number,
+          role: data.role?.name || data.role || '',
           deposit: data.deposit ?? null
         }
       } catch (err) {
@@ -159,13 +172,27 @@ export default {
       return DEPOSIT_STATUS_LABELS[status] || status
     })
 
+    const isStudent = computed(() => {
+      const r = String(user.value.role || '').toUpperCase()
+      return r === 'STUDENT' || r === ''
+    })
+
+    const roleLabel = computed(() => {
+      const r = String(user.value.role || '').toUpperCase()
+      if (r === 'FACULTY')  return 'دكتور - جامعة قاسيون'
+      if (r === 'EMPLOYEE') return 'موظف - جامعة قاسيون'
+      return 'طالب بجامعة قاسيون'
+    })
+
     return {
       user,
       loading,
       saving,
       saveChanges,
       depositIsPaid,
-      depositStatusLabel
+      depositStatusLabel,
+      isStudent,
+      roleLabel
     }
   }
 }
@@ -323,6 +350,14 @@ export default {
   background: #f5f6f7;
   color: #95a5a6;
   cursor: not-allowed;
+}
+
+.input-with-icon.staff-id input {
+  background: linear-gradient(135deg, #f9f3ff, #fdf9ff);
+  color: #7d3c98;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border: 1px dashed #d2b4de;
 }
 
 .hint-text {

@@ -10,7 +10,8 @@ export const authService = {
       email: data.email,
       phone: data.phone,
       university_number: data.universityNumber,
-      password: data.password
+      password: data.password,
+      role: data.role || 'STUDENT'
     })
   },
   getProfile() {

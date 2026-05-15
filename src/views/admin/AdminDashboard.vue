@@ -1,6 +1,20 @@
 <template>
   <div class="page-wrapper" dir="rtl">
 
+    <!-- ===== Toast Notification ===== -->
+    <transition name="toast-slide">
+      <div v-if="toast.visible" :class="['toast-notification', 'toast-' + toast.type]">
+        <div class="toast-icon">
+          <i :class="toast.type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'"></i>
+        </div>
+        <div class="toast-content">
+          <div class="toast-title">{{ toast.title }}</div>
+          <div class="toast-msg">{{ toast.message }}</div>
+        </div>
+        <button class="toast-close" @click="toast.visible = false"><i class="fas fa-times"></i></button>
+      </div>
+    </transition>
+
     <!-- Navbar -->
     <nav class="navbar">
       <div class="nav-brand">
@@ -195,7 +209,7 @@
         <div v-if="activeTab === 'users'">
           <div class="page-header">
             <h2 class="page-title"><i class="fas fa-users"></i> إدارة المستخدمين</h2>
-            <button class="add-btn" @click="openAddUserStub">
+            <button class="add-btn" @click="showAddUser = true">
               <i class="fas fa-plus"></i> إضافة مستخدم
             </button>
           </div>
@@ -511,20 +525,22 @@
             </div>
           </div>
 
-          <!-- Step 3: المؤلفون -->
+          <!-- Step 3: المؤلف -->
           <div v-if="wizardStep === 3" class="wizard-content">
-            <h4><i class="fas fa-pen-nib"></i> اختيار المؤلفين</h4>
-            <div class="quick-add-bar full-width">
-              <input v-model="quickAuthorName" type="text" placeholder="مؤلف غير موجود؟ الاسم الكامل" />
-              <button type="button" class="btn-quick-add" :disabled="quickAddBusy" @click="addAuthorQuick">إضافة مؤلف</button>
-            </div>
-            <div class="authors-selection">
-              <div v-for="a in authors" :key="a.id" class="author-checkbox">
-                <input type="checkbox" :value="a.id" v-model="newBook.authors" :id="'auth-'+a.id" />
-                <label :for="'auth-'+a.id">{{ a.full_name }}</label>
+            <h4><i class="fas fa-pen-nib"></i> اسم المؤلف</h4>
+            <div class="form-group full">
+              <label>اسم المؤلف الكامل *</label>
+              <div class="author-input-wrap">
+                <i class="fas fa-user-edit author-input-icon"></i>
+                <input
+                  v-model="newBook.authorName"
+                  type="text"
+                  placeholder="مثلاً: محمد أحمد العلي"
+                  class="author-text-input"
+                />
               </div>
+              <p class="help-text">سيتم إضافة المؤلف تلقائياً إلى قاعدة البيانات وربطه بالكتاب</p>
             </div>
-            <p class="help-text">يمكنك اختيار أكثر من مؤلف للكتاب الواحد</p>
           </div>
 
           <!-- Step 4: النسخ والمواقع -->
@@ -663,18 +679,21 @@
             </div>
           </div>
 
-          <!-- Step 3: المؤلفون -->
+          <!-- Step 3: المؤلف -->
           <div v-if="editWizardStep === 3" class="wizard-content">
-            <h4><i class="fas fa-pen-nib"></i> اختيار المؤلفين</h4>
-            <div class="quick-add-bar full-width">
-              <input v-model="quickAuthorName" type="text" placeholder="مؤلف غير موجود؟ الاسم الكامل" />
-              <button type="button" class="btn-quick-add" :disabled="quickAddBusy" @click="addAuthorQuick(true)">إضافة مؤلف</button>
-            </div>
-            <div class="authors-selection">
-              <div v-for="a in authors" :key="a.id" class="author-checkbox">
-                <input type="checkbox" :value="a.id" v-model="editingBook.authors" :id="'edit-auth-'+a.id" />
-                <label :for="'edit-auth-'+a.id">{{ a.full_name }}</label>
+            <h4><i class="fas fa-pen-nib"></i> اسم المؤلف</h4>
+            <div class="form-group full">
+              <label>اسم المؤلف الكامل *</label>
+              <div class="author-input-wrap">
+                <i class="fas fa-user-edit author-input-icon"></i>
+                <input
+                  v-model="editingBook.authorName"
+                  type="text"
+                  placeholder="مثلاً: محمد أحمد العلي"
+                  class="author-text-input"
+                />
               </div>
+              <p class="help-text">سيتم إضافة المؤلف أو استخدام الموجود وربطه بالكتاب</p>
             </div>
           </div>
 
@@ -869,6 +888,81 @@
         </div>
       </div>
     </div>
+    <!-- ===== Modal: إضافة مستخدم ===== -->
+    <div v-if="showAddUser" class="modal-overlay" @click.self="showAddUser = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h3><i class="fas fa-user-plus"></i> إضافة مستخدم جديد</h3>
+          <button class="modal-close" @click="showAddUser = false"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <!-- اختيار الدور -->
+          <div class="form-group full">
+            <label>نوع الحساب *</label>
+            <div class="admin-role-selector">
+              <div
+                v-for="r in [
+                  { value: 'STUDENT',  label: 'طالب',  icon: 'fas fa-user-graduate' },
+                  { value: 'FACULTY',  label: 'دكتور', icon: 'fas fa-chalkboard-teacher' },
+                  { value: 'EMPLOYEE', label: 'موظف',  icon: 'fas fa-briefcase' }
+                ]"
+                :key="r.value"
+                :class="['admin-role-card', newUserForm.role === r.value ? 'selected' : '']"
+                @click="newUserForm.role = r.value"
+              >
+                <i :class="r.icon"></i>
+                <span>{{ r.label }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group full">
+              <label>الاسم الكامل *</label>
+              <input v-model="newUserForm.fullName" type="text" placeholder="الاسم الثلاثي" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>البريد الإلكتروني *</label>
+              <input v-model="newUserForm.email" type="email" placeholder="example@univ.edu.sy" />
+            </div>
+            <div class="form-group">
+              <label>رقم الهاتف</label>
+              <input v-model="newUserForm.phone" type="text" placeholder="09..." />
+            </div>
+          </div>
+          <div class="form-row">
+            <div v-if="newUserForm.role === 'STUDENT'" class="form-group">
+              <label>الرقم الجامعي</label>
+              <input v-model="newUserForm.universityNumber" type="text" placeholder="الرقم الجامعي" />
+            </div>
+            <div v-else class="form-group">
+              <label>رقم الهوية <span class="auto-gen-badge"><i class="fas fa-magic"></i> تلقائي</span></label>
+              <input
+                :value="newUserForm.universityNumber || '(سيُولَّد عند الحفظ)'"
+                type="text"
+                disabled
+                class="auto-gen-input"
+              />
+            </div>
+            <div class="form-group">
+              <label>كلمة المرور *</label>
+              <input v-model="newUserForm.password" type="password" placeholder="••••••••" />
+            </div>
+          </div>
+          <div v-if="addUserError" class="modal-api-error">
+            <i class="fas fa-exclamation-triangle"></i> {{ addUserError }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="showAddUser = false">إلغاء</button>
+          <button class="btn-save" @click="saveNewUser" :disabled="addUserLoading">
+            <i class="fas fa-user-plus"></i>
+            {{ addUserLoading ? 'جاري الإضافة...' : 'إضافة المستخدم' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
   </div>
 </template>
@@ -895,8 +989,34 @@ export default {
     // Modals
     const showAddBook = ref(false)
     const showEditBook = ref(false)
+    const showAddUser = ref(false)
     const editBookLoading = ref(false)
     const editWizardStep = ref(1)
+
+    // Toast notification
+    const toast = reactive({ visible: false, type: 'success', title: '', message: '' })
+    let toastTimer = null
+    const showToast = (type, title, message) => {
+      if (toastTimer) clearTimeout(toastTimer)
+      toast.type = type
+      toast.title = title
+      toast.message = message
+      toast.visible = true
+      toastTimer = setTimeout(() => { toast.visible = false }, 5000)
+    }
+
+    // New User Form
+    const newUserForm = reactive({
+      fullName: '',
+      email: '',
+      phone: '',
+      universityNumber: '',
+      password: '',
+      role: 'STUDENT'
+    })
+    const addUserLoading = ref(false)
+    const addUserError = ref('')
+
     const editingBook = reactive({
       id: null,
       title: '',
@@ -907,7 +1027,7 @@ export default {
       cover_image_url: '',
       publisher_id: null,
       category_id: null,
-      authors: [],
+      authorName: '',
       copies: []
     })
     const showNewLoan = ref(false)
@@ -1002,7 +1122,7 @@ export default {
       cover_image_url: '',
       publisher_id: null,
       category_id: null,
-      authors: [],
+      authorName: '',
       copies: [
         { copy_code: '', barcode_value: '', location_id: null }
       ]
@@ -1067,7 +1187,6 @@ export default {
       { key: 'books',      label: 'إدارة الكتب',   icon: 'fas fa-book' },
       { key: 'categories', label: 'التصنيفات',     icon: 'fas fa-tags' },
       { key: 'publishers', label: 'الناشرون',      icon: 'fas fa-building' },
-      { key: 'authors',    label: 'المؤلفون',      icon: 'fas fa-pen-nib' },
       { key: 'locations',  label: 'المواقع',       icon: 'fas fa-map-marker-alt' },
       { key: 'loans',      label: 'الاستعارات',    icon: 'fas fa-exchange-alt' },
       { key: 'users',      label: 'المستخدمون',    icon: 'fas fa-users' },
@@ -1092,7 +1211,11 @@ export default {
       const loanList = loans.value || []
       const userList = users.value || []
       stats.totalBooks = (books.value || []).length
-      stats.totalUsers = userList.filter(u => u.status === 'ACTIVE').length
+      // يشمل الجميع عدا librarian و admin
+      stats.totalUsers = userList.filter(u => {
+        const role = String(u.role?.name || u.role || '').toUpperCase()
+        return role !== 'LIBRARIAN' && role !== 'ADMIN'
+      }).length
       stats.activeLoansCount = loanList.filter(l => l.status === 'ACTIVE').length
       stats.overdueLoansCount = loanList.filter(l => l.status === 'OVERDUE').length
     }
@@ -1226,15 +1349,23 @@ export default {
       router.push('/login')
     }
 
-    const buildCreateBookPayload = () => {
-      const authorsPayload = (newBook.authors || []).map((a) => {
-        if (typeof a === 'number') return { id: a }
-        if (typeof a === 'string') return { id: Number(a) || a }
-        if (a && typeof a === 'object') {
-          if ('id' in a) return { id: a.id }
+    const buildCreateBookPayload = async () => {
+      // إنشاء المؤلف وربطه بالكتاب
+      let authorsPayload = []
+      if (newBook.authorName && newBook.authorName.trim()) {
+        try {
+          const res = await bookService.createAuthor({ full_name: newBook.authorName.trim() })
+          const created = res.data.data || res.data
+          if (created?.id) authorsPayload = [{ id: created.id }]
+        } catch (err) {
+          // قد يكون موجوداً مسبقاً - نحاول الجلب
+          try {
+            await refreshBookLookups()
+            const found = authors.value.find(a => a.full_name === newBook.authorName.trim())
+            if (found) authorsPayload = [{ id: found.id }]
+          } catch (_) {}
         }
-        return { id: a }
-      })
+      }
 
       const copiesPayload = (newBook.copies || []).map((c) => ({
         copy_code: c.copy_code,
@@ -1260,16 +1391,15 @@ export default {
     const saveBookWizard = async () => {
       wizardLoading.value = true
       try {
-        const payload = buildCreateBookPayload()
+        const payload = await buildCreateBookPayload()
         await bookService.createFullBook(payload)
-        alert('تم حفظ الكتاب بالكامل بنجاح')
+        showToast('success', 'تم إضافة الكتاب', `تم حفظ "${newBook.title}" بنجاح`)
         showAddBook.value = false
         fetchData()
-        // Reset newBook
         Object.assign(newBook, {
           title: '', isbn: '', language: 'Arabic', publish_year: new Date().getFullYear(),
           summary: '', description: '', cover_image_url: '', publisher_id: null,
-          category_id: null, authors: [], copies: [{ copy_code: '', barcode_value: '', location_id: null }]
+          category_id: null, authorName: '', copies: [{ copy_code: '', barcode_value: '', location_id: null }]
         })
         wizardStep.value = 1
       } catch (err) {
@@ -1293,10 +1423,12 @@ export default {
     const returnBookAction = async (loan) => {
       try {
         await loanService.returnBook(loan.id)
-        alert('تم تسجيل الإرجاع')
+        const bookTitle = loan.book?.title || 'الكتاب'
+        const userName = loan.user?.full_name || 'المستخدم'
+        showToast('success', 'تم ارجاع الكتاب ', `"${bookTitle}" من ${userName}`)
         fetchData()
       } catch (err) {
-        alert('فشل تسجيل الإرجاع')
+        showToast('error', 'فشل الإرجاع', err.response?.data?.message || err.message)
       }
     }
 
@@ -1548,7 +1680,8 @@ export default {
       editingBook.cover_image_url = book.cover_image_url || ''
       editingBook.publisher_id = book.publisher?.id || book.publisher_id || null
       editingBook.category_id = book.category?.id || book.category_id || null
-      editingBook.authors = (book.authors || []).map(a => a.id)
+      // تعبئة اسم المؤلف من أول مؤلف
+      editingBook.authorName = (book.authors && book.authors.length > 0) ? book.authors[0].full_name : ''
       editingBook.copies = (book.copies || []).map(c => ({
         id: c.id,
         copy_code: c.copy_code,
@@ -1565,14 +1698,19 @@ export default {
     const saveEditBook = async () => {
       editBookLoading.value = true
       try {
-        const authorsPayload = (editingBook.authors || []).map(a => {
-          if (typeof a === 'number') return { id: a }
-          if (typeof a === 'string') return { id: Number(a) || a }
-          if (a && typeof a === 'object') {
-            if ('id' in a) return { id: a.id }
+        // إنشاء المؤلف وربطه
+        let authorsPayload = []
+        if (editingBook.authorName && editingBook.authorName.trim()) {
+          try {
+            const res = await bookService.createAuthor({ full_name: editingBook.authorName.trim() })
+            const created = res.data.data || res.data
+            if (created?.id) authorsPayload = [{ id: created.id }]
+          } catch (err) {
+            await refreshBookLookups()
+            const found = authors.value.find(a => a.full_name === editingBook.authorName.trim())
+            if (found) authorsPayload = [{ id: found.id }]
           }
-          return { id: a }
-        })
+        }
 
         const copiesPayload = (editingBook.copies || []).map(c => ({
           id: c.id,
@@ -1594,7 +1732,7 @@ export default {
           copies: copiesPayload
         }
         await bookService.updateBook(editingBook.id, payload)
-        alert('تم تعديل الكتاب بنجاح')
+        showToast('success', 'تم تعديل الكتاب', `تم تحديث "${editingBook.title}" بنجاح`)
         showEditBook.value = false
         fetchData()
       } catch (err) {
@@ -1619,7 +1757,42 @@ export default {
     }
 
     const openAddUserStub = () => {
-      alert('يمكن للمستخدمين التسجيل من صفحة «إنشاء حساب»، أو أضفهم عبر واجهة السيرفر.')
+      showAddUser.value = true
+    }
+
+    const saveNewUser = async () => {
+      if (!newUserForm.fullName || !newUserForm.email || !newUserForm.password) {
+        addUserError.value = 'يرجى ملء جميع الحقول المطلوبة'
+        return
+      }
+      addUserLoading.value = true
+      addUserError.value = ''
+      try {
+        const { authService } = await import('../../api/authService')
+        // توليد رقم هوية تلقائي للموظف/الدكتور
+        let uniNum = newUserForm.universityNumber
+        if (newUserForm.role !== 'STUDENT' && !uniNum) {
+          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+          const prefix = newUserForm.role === 'FACULTY' ? 'FAC' : 'EMP'
+          uniNum = prefix + '-' + Array.from({length: 8}, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+        }
+        await authService.register({
+          fullName: newUserForm.fullName,
+          email: newUserForm.email,
+          phone: newUserForm.phone,
+          universityNumber: uniNum,
+          password: newUserForm.password,
+          role: newUserForm.role
+        })
+        showToast('success', 'تم إضافة المستخدم', `تم إنشاء حساب ${newUserForm.fullName} بنجاح`)
+        showAddUser.value = false
+        Object.assign(newUserForm, { fullName: '', email: '', phone: '', universityNumber: '', password: '', role: 'STUDENT' })
+        fetchData()
+      } catch (err) {
+        addUserError.value = err.response?.data?.message || 'فشل إضافة المستخدم'
+      } finally {
+        addUserLoading.value = false
+      }
     }
 
     const saveLoan = async () => {
@@ -1663,6 +1836,7 @@ export default {
 
     return {
       activeTab, adminName, today, showAddBook, showNewLoan, showEditBook, showLoanDetails, selectedLoan,
+      showAddUser, newUserForm, addUserLoading, addUserError, saveNewUser, openAddUserStub,
       wizardStep, wizardLoading, editBookLoading, editingBook, editWizardStep,
       stats, books, loans, users, fines,
       categories, publishers, authors, locations,
@@ -1677,13 +1851,14 @@ export default {
       handleCoverFileChange, clearCoverImage, handleEditCoverFileChange,
       editCategory, deleteCategory, editPublisher, deletePublisher, editAuthor, deleteAuthor, editLocation, deleteLocation,
       formatLocationLabel,
-      editBook, saveEditBook, editUser, openAddUserStub, saveLoan, viewLoan,
+      editBook, saveEditBook, editUser, saveLoan, viewLoan,
       addCopyRow, removeCopyRow, addEditCopyRow, removeEditCopyRow, fetchData,
       newFine, submittingFine, submitFine,
       userSearchInModal, selectedUserInModal, showUserDropdown,
       bookSearchInModal, selectedBookInModal, showBookDropdown,
       filteredUsersForModal, filteredBooksForModal,
-      selectUserForModal, selectBookForModal, isBookAvailable, calculatedDueDate
+      selectUserForModal, selectBookForModal, isBookAvailable, calculatedDueDate,
+      toast, showToast
     }
   }
 }
@@ -1927,4 +2102,117 @@ export default {
 }
 .remove-tag { background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 1rem; }
 .disabled-input { background: #f8fafc !important; color: #7f8c8d !important; cursor: not-allowed; border: 2px solid #f0f3f6 !important; }
+
+/* ===== TOAST NOTIFICATION ===== */
+.toast-notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 340px;
+  max-width: 520px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+  font-family: 'Tajawal', sans-serif;
+  direction: rtl;
+  backdrop-filter: blur(10px);
+}
+.toast-success {
+  background: linear-gradient(135deg, #eafaf1, #f0fff4);
+  border: 1px solid #a9dfbf;
+}
+.toast-error {
+  background: linear-gradient(135deg, #fdf0f0, #fff5f5);
+  border: 1px solid #fadbd8;
+}
+.toast-icon {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; flex-shrink: 0;
+}
+.toast-success .toast-icon { background: #27ae60; color: white; }
+.toast-error .toast-icon { background: #e74c3c; color: white; }
+.toast-content { flex: 1; }
+.toast-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 3px; }
+.toast-success .toast-title { color: #1e8449; }
+.toast-error .toast-title { color: #c0392b; }
+.toast-msg { font-size: 0.82rem; opacity: 0.8; }
+.toast-success .toast-msg { color: #196f3d; }
+.toast-error .toast-msg { color: #922b21; }
+.toast-close {
+  background: none; border: none; cursor: pointer; font-size: 0.9rem;
+  opacity: 0.5; transition: 0.2s; padding: 4px;
+}
+.toast-close:hover { opacity: 1; }
+.toast-slide-enter-active { transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.toast-slide-leave-active { transition: all 0.3s ease; }
+.toast-slide-enter-from { transform: translateX(-50%) translateY(-60px); opacity: 0; }
+.toast-slide-leave-to { transform: translateX(-50%) translateY(-30px); opacity: 0; }
+
+/* ===== ADMIN ROLE SELECTOR ===== */
+.admin-role-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 6px;
+}
+.admin-role-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 10px;
+  border: 2px solid #e8ecf0; border-radius: 12px;
+  background: white; cursor: pointer; transition: all 0.2s;
+  font-family: 'Tajawal', sans-serif; text-align: center;
+}
+.admin-role-card i { font-size: 1.4rem; color: #aab7c4; transition: 0.2s; }
+.admin-role-card span { font-size: 0.85rem; font-weight: 600; color: #2c3e50; }
+.admin-role-card:hover { border-color: #3498db; background: #f0f8ff; }
+.admin-role-card:hover i { color: #3498db; }
+.admin-role-card.selected { border-color: #2e86c1; background: linear-gradient(135deg, #eaf4fd, #f0f8ff); }
+.admin-role-card.selected i { color: #1a5276; }
+.admin-role-card.selected span { color: #1a5276; }
+
+/* ===== MODAL API ERROR ===== */
+.modal-api-error {
+  background: #fdf0f0; color: #e74c3c;
+  padding: 10px 14px; border-radius: 10px;
+  font-size: 0.85rem; display: flex; align-items: center; gap: 8px;
+  border: 1px solid #fadbd8;
+}
+
+/* ===== AUTHOR TEXT INPUT ===== */
+.author-input-wrap {
+  position: relative; display: flex; align-items: center;
+}
+.author-input-icon {
+  position: absolute; right: 14px; color: #aab7c4; font-size: 0.95rem; z-index: 1;
+}
+.author-text-input {
+  width: 100%; padding: 12px 42px 12px 14px;
+  border: 2px solid #e8ecf0; border-radius: 12px;
+  font-family: 'Tajawal', sans-serif; font-size: 0.95rem;
+  color: #2c3e50; outline: none; transition: 0.25s; background: white;
+}
+.author-text-input:focus { border-color: #2e86c1; box-shadow: 0 0 0 3px rgba(46,134,193,0.1); }
+
+/* ===== AUTO GEN BADGE (لوحة الأدمن) ===== */
+.auto-gen-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: linear-gradient(135deg, #9b59b6, #8e44ad);
+  color: white; padding: 2px 7px; border-radius: 20px;
+  font-size: 0.65rem; font-weight: 600; margin-right: 5px;
+}
+.auto-gen-input {
+  width: 100%; padding: 10px 14px;
+  border: 2px dashed #d2b4de; border-radius: 10px;
+  font-family: 'Tajawal', sans-serif; font-size: 0.85rem;
+  background: linear-gradient(135deg, #f9f3ff, #fdf9ff);
+  color: #7d3c98; font-style: italic; cursor: not-allowed;
+}
+
+
 </style>

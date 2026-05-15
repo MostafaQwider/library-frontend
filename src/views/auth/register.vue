@@ -38,6 +38,29 @@
 
         <form @submit.prevent="handleRegister" class="login-form">
 
+          <!-- اختيار الدور -->
+          <div class="field-group">
+            <label>نوع الحساب *</label>
+            <div class="role-cards">
+              <div
+                v-for="r in roles"
+                :key="r.value"
+                :class="['role-card', selectedRole === r.value ? 'selected' : '']"
+                @click="selectedRole = r.value"
+              >
+                <i :class="r.icon"></i>
+                <span class="role-name">{{ r.label }}</span>
+                <span class="role-desc">{{ r.desc }}</span>
+                <div class="role-check" v-if="selectedRole === r.value">
+                  <i class="fas fa-check-circle"></i>
+                </div>
+              </div>
+            </div>
+            <transition name="err">
+              <span v-if="roleError" class="err-msg"><i class="fas fa-exclamation-circle"></i> {{ roleError }}</span>
+            </transition>
+          </div>
+
           <div class="field-group" :class="{ 'has-error': fullNameError }">
             <label>الاسم الكامل</label>
             <div class="input-wrapper">
@@ -89,7 +112,8 @@
             </transition>
           </div>
 
-          <div class="field-group" :class="{ 'has-error': universityNumberError }">
+          <!-- الرقم الجامعي: يظهر للطالب فقط -->
+          <div v-if="selectedRole === 'STUDENT'" class="field-group" :class="{ 'has-error': universityNumberError }">
             <label>الرقم الجامعي</label>
             <div class="input-wrapper">
               <i class="fas fa-id-card input-icon"></i>
@@ -104,6 +128,21 @@
             <transition name="err">
               <span v-if="universityNumberError" class="err-msg"><i class="fas fa-exclamation-circle"></i> {{ universityNumberError }}</span>
             </transition>
+          </div>
+
+          <!-- رقم الهوية الوظيفية: تلقائي للموظف/الدكتور -->
+          <div v-if="selectedRole !== 'STUDENT'" class="field-group auto-id-field">
+            <label>رقم الهوية <span class="auto-badge"><i class="fas fa-magic"></i> تلقائي</span></label>
+            <div class="input-wrapper">
+              <i class="fas fa-hashtag input-icon"></i>
+              <input
+                type="text"
+                :value="universityNumber"
+                disabled
+                class="auto-input"
+              />
+            </div>
+            <small class="hint-auto">يُولَّد تلقائياً ولا يمكن تعديله</small>
           </div>
 
           <div class="field-group" :class="{ 'has-error': passwordError }">
@@ -171,6 +210,12 @@ import { useAuthStore } from '../../store/authStore'
 export default {
   data() {
     return {
+      selectedRole: 'STUDENT',
+      roles: [
+        { value: 'STUDENT',  label: 'طالب',   icon: 'fas fa-user-graduate', desc: 'طالب جامعي' },
+        { value: 'FACULTY',  label: 'دكتور',   icon: 'fas fa-chalkboard-teacher', desc: 'عضو هيئة تدريس' },
+        { value: 'EMPLOYEE', label: 'موظف',   icon: 'fas fa-briefcase', desc: 'موظف جامعي' },
+      ],
       fullName: '',
       email: '',
       phone: '',
@@ -178,6 +223,7 @@ export default {
       password: '',
       confirmPassword: '',
       
+      roleError: '',
       fullNameError: '',
       emailError: '',
       phoneError: '',
@@ -194,12 +240,26 @@ export default {
   computed: {
     isFormValid() {
       const emailPattern = /^[^\@\s]+@[^\@\s]+\.[^\@\s]+$/;
-      return this.fullName.length >= 3 &&
+      const uniOk = this.selectedRole === 'STUDENT'
+        ? this.universityNumber.length > 0
+        : true // تلقائي للموظف/الدكتور
+      return this.selectedRole !== '' &&
+             this.fullName.length >= 3 &&
              emailPattern.test(this.email) &&
              this.phone.length >= 10 &&
-             this.universityNumber.length > 0 &&
+             uniOk &&
              this.password.length >= 6 &&
              this.password === this.confirmPassword;
+    }
+  },
+  watch: {
+    selectedRole(newRole) {
+      if (newRole !== 'STUDENT') {
+        // توليد رقم عشوائي للموظف/الدكتور
+        this.universityNumber = this.generateStaffId()
+      } else {
+        this.universityNumber = ''
+      }
     }
   },
   methods: {
@@ -213,8 +273,19 @@ export default {
     validatePhone() {
       this.phoneError = this.phone.length < 10 ? 'يرجى إدخال رقم هاتف صحيح' : '';
     },
+    generateStaffId() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+      const prefix = this.selectedRole === 'FACULTY' ? 'FAC' : 'EMP'
+      let id = prefix + '-'
+      for (let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)]
+      return id
+    },
     validateUniversityNumber() {
-      this.universityNumberError = this.universityNumber.length === 0 ? 'يرجى إدخال الرقم الجامعي' : '';
+      if (this.selectedRole === 'STUDENT') {
+        this.universityNumberError = this.universityNumber.length === 0 ? 'يرجى إدخال الرقم الجامعي' : '';
+      } else {
+        this.universityNumberError = ''
+      }
     },
     validatePassword() {
       if (this.password.length < 6) {
@@ -232,6 +303,7 @@ export default {
       }
     },
     async handleRegister() {
+      if (!this.selectedRole) { this.roleError = 'يرجى اختيار نوع الحساب'; return; }
       if (!this.isFormValid) return;
       this.isLoading = true;
       this.apiError = '';
@@ -241,7 +313,8 @@ export default {
         email: this.email,
         phone: this.phone,
         universityNumber: this.universityNumber,
-        password: this.password
+        password: this.password,
+        role: this.selectedRole
       });
       this.isLoading = false;
       if (result.success) {
@@ -294,14 +367,11 @@ export default {
 }
 
 .panel-logo {
-  width: 90px;
-  height: 90px;
+  width: 90px; height: 90px;
   background: rgba(255,255,255,0.1);
   border: 2px solid rgba(255,255,255,0.25);
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   font-size: 2.2rem;
   margin: 0 auto 25px;
   backdrop-filter: blur(10px);
@@ -313,30 +383,13 @@ export default {
   50% { box-shadow: 0 0 0 20px rgba(255,255,255,0); }
 }
 
-.panel-title {
-  font-size: 2rem;
-  font-weight: 800;
-  margin-bottom: 10px;
-  letter-spacing: 1px;
-}
-
-.panel-subtitle {
-  font-size: 1rem;
-  opacity: 0.75;
-  margin-bottom: 50px;
-  font-weight: 300;
-}
+.panel-title { font-size: 2rem; font-weight: 800; margin-bottom: 10px; letter-spacing: 1px; }
+.panel-subtitle { font-size: 1rem; opacity: 0.75; margin-bottom: 50px; font-weight: 300; }
 
 .panel-stats {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 25px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 20px;
-  padding: 20px 35px;
-  backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: center; gap: 25px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px; padding: 20px 35px; backdrop-filter: blur(10px);
 }
 
 .stat { text-align: center; }
@@ -344,14 +397,8 @@ export default {
 .lbl { display: block; font-size: 0.75rem; opacity: 0.7; margin-top: 3px; }
 .stat-divider { width: 1px; height: 40px; background: rgba(255,255,255,0.2); }
 
-/* كتب طائرة */
 .floating-books { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
-.book-float {
-  position: absolute;
-  color: rgba(255,255,255,0.06);
-  font-size: 5rem;
-  animation: floatAnim 8s ease-in-out infinite;
-}
+.book-float { position: absolute; color: rgba(255,255,255,0.06); font-size: 5rem; animation: floatAnim 8s ease-in-out infinite; }
 .b1 { top: 10%; right: 10%; animation-delay: 0s; font-size: 4rem; }
 .b2 { bottom: 20%; left: 8%; animation-delay: 2.5s; font-size: 6rem; }
 .b3 { top: 50%; right: 5%; animation-delay: 5s; font-size: 3.5rem; }
@@ -366,53 +413,99 @@ export default {
   flex: 0.9;
   background: #f8fafc;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 40px 30px;
+  padding: 30px 30px;
   overflow-y: auto;
 }
 
-.login-box {
-  width: 100%;
-  max-width: 420px;
-  margin: auto;
-}
+.login-box { width: 100%; max-width: 440px; margin: auto; }
 
-.login-header {
-  text-align: center;
-  margin-bottom: 25px;
-}
+.login-header { text-align: center; margin-bottom: 20px; }
 
 .avatar-ring {
-  width: 70px;
-  height: 70px;
+  width: 70px; height: 70px;
   background: linear-gradient(135deg, #1a5276, #2e86c1);
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.6rem;
-  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem; color: white;
   margin: 0 auto 15px;
   box-shadow: 0 8px 25px rgba(46,134,193,0.35);
 }
 
-.login-header h2 {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #1a2940;
-  margin-bottom: 6px;
+.login-header h2 { font-size: 1.5rem; font-weight: 800; color: #1a2940; margin-bottom: 6px; }
+.login-header p { color: #95a5a6; font-size: 0.9rem; }
+
+/* ===== ROLE CARDS ===== */
+.role-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 4px;
 }
 
-.login-header p {
-  color: #95a5a6;
+.role-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 10px;
+  border: 2px solid #e8ecf0;
+  border-radius: 14px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-align: center;
+}
+
+.role-card i {
+  font-size: 1.5rem;
+  color: #aab7c4;
+  transition: color 0.25s;
+}
+
+.role-card .role-name {
   font-size: 0.9rem;
+  font-weight: 700;
+  color: #2c3e50;
+}
+
+.role-card .role-desc {
+  font-size: 0.72rem;
+  color: #95a5a6;
+}
+
+.role-card:hover {
+  border-color: #2e86c1;
+  background: #f0f8ff;
+}
+.role-card:hover i { color: #2e86c1; }
+
+.role-card.selected {
+  border-color: #2e86c1;
+  background: linear-gradient(135deg, #eaf4fd, #f0f8ff);
+  box-shadow: 0 4px 15px rgba(46,134,193,0.15);
+}
+.role-card.selected i { color: #1a5276; }
+.role-card.selected .role-name { color: #1a5276; }
+
+.role-check {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  color: #2e86c1;
+  font-size: 0.85rem;
+  animation: popIn 0.2s ease;
+}
+
+@keyframes popIn {
+  0% { transform: scale(0); }
+  100% { transform: scale(1); }
 }
 
 /* ===== FORM ===== */
-.field-group {
-  margin-bottom: 15px;
-}
+.field-group { margin-bottom: 13px; }
 
 .field-group label {
   display: block;
@@ -422,19 +515,9 @@ export default {
   color: #2c3e50;
 }
 
-.input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
+.input-wrapper { position: relative; display: flex; align-items: center; }
 
-.input-icon {
-  position: absolute;
-  right: 15px;
-  color: #aab7c4;
-  font-size: 0.9rem;
-  z-index: 1;
-}
+.input-icon { position: absolute; right: 15px; color: #aab7c4; font-size: 0.9rem; z-index: 1; }
 
 .input-wrapper input {
   width: 100%;
@@ -449,93 +532,45 @@ export default {
   outline: none;
 }
 
-.input-wrapper input:focus {
-  border-color: #2e86c1;
-  box-shadow: 0 0 0 4px rgba(46,134,193,0.1);
-}
-
+.input-wrapper input:focus { border-color: #2e86c1; box-shadow: 0 0 0 4px rgba(46,134,193,0.1); }
 .has-error .input-wrapper input { border-color: #e74c3c; }
 
 .eye-btn {
-  position: absolute;
-  left: 14px;
-  background: none;
-  border: none;
-  color: #aab7c4;
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 4px;
-  transition: 0.2s;
+  position: absolute; left: 14px;
+  background: none; border: none; color: #aab7c4;
+  cursor: pointer; font-size: 0.9rem; padding: 4px; transition: 0.2s;
 }
 .eye-btn:hover { color: #2e86c1; }
 
 .err-msg {
-  display: block;
-  color: #e74c3c;
-  font-size: 0.75rem;
-  margin-top: 4px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  display: flex; align-items: center; gap: 5px;
+  color: #e74c3c; font-size: 0.75rem; margin-top: 4px;
 }
 
 .form-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;
 }
 
-.forgot-link {
-  font-size: 0.88rem;
-  color: #2e86c1;
-  text-decoration: none;
-  font-weight: 500;
-}
-
+.forgot-link { font-size: 0.88rem; color: #2e86c1; text-decoration: none; font-weight: 500; }
 .forgot-link:hover { text-decoration: underline; }
 
 /* زر الدخول */
 .login-btn {
-  width: 100%;
-  padding: 12px;
+  width: 100%; padding: 12px;
   background: linear-gradient(135deg, #1a5276, #2e86c1);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 700;
+  color: white; border: none; border-radius: 12px;
+  font-size: 1rem; font-weight: 700;
   font-family: 'Tajawal', sans-serif;
-  cursor: pointer;
-  transition: 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
+  cursor: pointer; transition: 0.3s;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
   letter-spacing: 0.5px;
   box-shadow: 0 6px 20px rgba(46,134,193,0.3);
 }
+.login-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(46,134,193,0.4); }
+.login-btn:disabled { background: linear-gradient(135deg, #bdc3c7, #95a5a6); cursor: not-allowed; box-shadow: none; transform: none; }
 
-.login-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(46,134,193,0.4);
-}
-
-.login-btn:disabled {
-  background: linear-gradient(135deg, #bdc3c7, #95a5a6);
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
-
-/* نقاط التحميل */
 .dots { display: flex; gap: 5px; align-items: center; }
-.dots span {
-  width: 7px; height: 7px;
-  background: white;
-  border-radius: 50%;
-  animation: dotBounce 1.2s infinite ease-in-out;
-}
+.dots span { width: 7px; height: 7px; background: white; border-radius: 50%; animation: dotBounce 1.2s infinite ease-in-out; }
 .dots span:nth-child(2) { animation-delay: 0.2s; }
 .dots span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes dotBounce {
@@ -544,26 +579,54 @@ export default {
 }
 
 .api-error {
-  background: #fdf0f0;
-  color: #e74c3c;
-  padding: 12px;
-  border-radius: 10px;
-  margin-top: 15px;
-  font-size: 0.85rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  background: #fdf0f0; color: #e74c3c;
+  padding: 12px; border-radius: 10px; margin-top: 15px;
+  font-size: 0.85rem; display: flex; align-items: center; gap: 8px;
   border: 1px solid #fadbd8;
 }
 
-/* أنيميشن الخطأ */
 .err-enter-active, .err-leave-active { transition: all 0.3s ease; }
 .err-enter, .err-leave-to { opacity: 0; transform: translateY(-5px); }
 
-/* Responsive */
+/* رقم الهوية التلقائي */
+.auto-id-field .auto-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, #9b59b6, #8e44ad);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.auto-input {
+  width: 100%;
+  padding: 10px 42px 10px 14px;
+  border: 2px dashed #d2b4de;
+  border-radius: 12px;
+  font-family: 'Tajawal', sans-serif;
+  font-size: 0.9rem;
+  background: linear-gradient(135deg, #f9f3ff, #fdf9ff);
+  color: #7d3c98;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: not-allowed;
+}
+.hint-auto {
+  display: block;
+  font-size: 0.72rem;
+  color: #9b59b6;
+  margin-top: 4px;
+  opacity: 0.8;
+}
+
 @media (max-width: 768px) {
   .left-panel { display: none; }
   .right-panel { flex: 1; background: white; padding-top: 20px; padding-bottom: 20px; }
   .login-wrapper { overflow-y: auto; }
+  .role-cards { grid-template-columns: repeat(3, 1fr); gap: 7px; }
 }
 </style>

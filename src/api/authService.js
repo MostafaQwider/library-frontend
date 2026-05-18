@@ -16,5 +16,8 @@ export const authService = {
   },
   getProfile() {
     return api.get('/users/profile')
+  },
+  saveFcmToken(token, deviceType = 'WEB') {
+    return api.post('/notifications/save-fcm-token', { token, deviceType })
   }
 }

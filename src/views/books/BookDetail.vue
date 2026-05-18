@@ -62,6 +62,17 @@
               <span class="meta-icon"><i class="fas fa-barcode"></i></span>
               <div><span class="meta-label">ISBN</span><span class="meta-val">{{ book.isbn }}</span></div>
             </div>
+            <div class="meta-item" v-if="bookLocations && bookLocations.length > 0">
+              <span class="meta-icon"><i class="fas fa-map-marker-alt"></i></span>
+              <div>
+                <span class="meta-label">موقع الكتاب</span>
+                <span class="meta-val">
+                  <div v-for="(loc, index) in bookLocations" :key="index" style="margin-bottom: 4px;">
+                    {{ loc }}
+                  </div>
+                </span>
+              </div>
+            </div>
           </div>
 
           <!-- أزرار الإجراءات -->
@@ -86,7 +97,7 @@
         <h3 class="related-title"><i class="fas fa-book-open"></i> كتب مشابهة</h3>
         <div class="related-grid">
           <div v-for="rb in relatedBooks" :key="rb.id" class="related-card" @click="$router.push('/books/' + rb.id)">
-            <img :src="rb.cover_image_url || 'https://via.placeholder.com/45x55?text=Img'" class="related-img" />
+            <img :src="'http://127.0.0.1:5000'+rb.cover_image_url || 'https://via.placeholder.com/45x55?text=Img'" class="related-img" />
             <div class="related-info">
               <span class="related-book-title">{{ rb.title }}</span>
               <span class="related-author">{{ rb.authors?.map(a => a.full_name).join(', ') }}</span>
@@ -138,6 +149,26 @@ export default {
 
     onMounted(fetchBook)
 
+    const formatLocationLabel = (loc) => {
+      if (!loc) return ''
+      const parts = [
+        loc.library_name,
+        loc.floor ? `طابق ${loc.floor}` : '',
+        loc.section ? `قسم ${loc.section}` : '',
+        loc.aisle ? `ممر ${loc.aisle}` : '',
+        loc.shelf ? `رف ${loc.shelf}` : '',
+        loc.position ? `موضع ${loc.position}` : ''
+      ].filter(Boolean)
+      return parts.join(' | ')
+    }
+
+    const bookLocations = computed(() => {
+      if (!book.value?.copies) return []
+      const locs = book.value.copies.map(c => c.location).filter(Boolean)
+      const uniqueLocLabels = [...new Set(locs.map(l => formatLocationLabel(l)))]
+      return uniqueLocLabels
+    })
+
     const isAvailable = computed(() => {
       return (book.value?.copies || []).some(c => c.status === 'AVAILABLE')
     })
@@ -166,7 +197,7 @@ export default {
     }
 
     return {
-      book, loading, relatedBooks, isAvailable, availableCopiesCount, reserve, logout
+      book, loading, relatedBooks, isAvailable, availableCopiesCount, reserve, logout, bookLocations
     }
   }
 }

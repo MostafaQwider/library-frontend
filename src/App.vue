@@ -8,10 +8,54 @@
 
 <script>
 import ChatbotUI from '@/components/ChatbotUI.vue';
+import { requestFirebaseNotificationPermission, onMessageListener } from '@/firebase';
+import { useAuthStore } from '@/store/authStore';
+import { authService } from '@/api/authService';
+import { watch, onMounted } from 'vue';
 
 export default {
   components: {
     ChatbotUI
+  },
+  setup() {
+    const authStore = useAuthStore();
+
+    const setupFirebaseMessaging = async () => {
+      if (authStore.isAuthenticated) {
+        const token = await requestFirebaseNotificationPermission();
+        if (token) {
+          try {
+            await authService.saveFcmToken(token, 'WEB');
+            console.log('FCM token saved successfully.');
+          } catch (error) {
+            console.error('Failed to save FCM token:', error);
+          }
+        }
+
+        onMessageListener().then((payload) => {
+          console.log('Foreground message received:', payload);
+          // Show a simple alert or use a toast library if available
+          const title = payload.notification?.title || 'إشعار جديد';
+          const body = payload.notification?.body || '';
+          alert(`${title}\n${body}`);
+          
+          // Re-register listener for the next message
+          setupFirebaseMessaging();
+        }).catch((err) => console.log('failed to listen: ', err));
+      }
+    };
+
+    onMounted(() => {
+      setupFirebaseMessaging();
+    });
+
+    watch(() => authStore.isAuthenticated, (newVal) => {
+      if (newVal) {
+        setupFirebaseMessaging();
+      }
+    });
+
+    return {};
   },
   computed: {
     isAuthPage() {

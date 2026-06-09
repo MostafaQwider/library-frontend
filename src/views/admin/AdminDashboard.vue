@@ -1174,8 +1174,8 @@
               <label>درجة التوصية (Score)</label>
               <input v-model.number="newRecommendation.score" type="number" min="0" max="1" step="0.01" placeholder="مثال: 0.85" />
               <span class="field-hint"><i class="fas fa-info-circle"></i> مدى ملائمة الكتاب للمستخدم من 0.0 إلى 1.0</span>
-              <span class="field-hint" style="color: #e67e22; margin-top: 4px; display: block;">
-                <i class="fas fa-exclamation-triangle"></i> ملاحظة: التوصيات بدرجة أقل من 0.5 لن تظهر للطالب
+              <span v-if="newRecommendation.score !== null && newRecommendation.score !== '' && newRecommendation.score < 0.5" class="field-hint" style="color: #e74c3c; margin-top: 6px; display: block; font-weight: 600;">
+                <i class="fas fa-exclamation-triangle"></i> تنبيه: هذه التوصية لن تظهر للطالب لأن السكور أقل من 0.5
               </span>
             </div>
           </div>

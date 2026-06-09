@@ -471,6 +471,73 @@
           </div>
         </div>
 
+        <!-- ===== إدارة التوصيات ===== -->
+        <div v-if="activeTab === 'recommendations'">
+          <div class="page-header">
+            <h2 class="page-title"><i class="fas fa-lightbulb"></i> إدارة التوصيات</h2>
+            <button class="add-btn" @click="showAddRecommendation = true">
+              <i class="fas fa-plus"></i> إضافة توصية
+            </button>
+          </div>
+
+          <div class="filter-bar">
+            <div class="search-mini">
+              <i class="fas fa-search"></i>
+              <input v-model="recSearch" placeholder="ابحث بالمستخدم أو الكتاب..." />
+            </div>
+          </div>
+
+          <div class="section-card">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>المستخدم</th>
+                  <th>الكتاب</th>
+                  <th>التقييم</th>
+                  <th>Score</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="rec in filteredRecommendations" :key="rec.id">
+                  <td>
+                    <div class="user-cell">
+                      <div class="mini-avatar-tbl">{{ getRecUserName(rec)?.[0] || 'U' }}</div>
+                      {{ getRecUserName(rec) }}
+                    </div>
+                  </td>
+                  <td class="book-cell">{{ getRecBookTitle(rec) }}</td>
+                  <td>
+                    <div class="rating-stars">
+                      <i v-for="s in 5" :key="s" :class="['fas fa-star', s <= (rec.rating || 0) ? 'star-filled' : 'star-empty']"></i>
+                      <span class="rating-num">{{ rec.rating || 0 }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="score-bar-wrap">
+                      <div class="score-bar">
+                        <div class="score-fill" :style="{ width: ((rec.score || 0) * 100) + '%' }"></div>
+                      </div>
+                      <span class="score-val">{{ (rec.score || 0).toFixed(2) }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="action-btns">
+                      <button class="act-delete" @click="deleteRecommendation(rec)" title="حذف"><i class="fas fa-trash"></i></button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="filteredRecommendations.length === 0">
+                  <td colspan="5" style="text-align:center; padding:30px; color:#95a5a6;">
+                    <i class="fas fa-lightbulb" style="font-size:1.5rem; margin-bottom:8px; display:block;"></i>
+                    لا توجد توصيات حالياً
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -1028,6 +1095,105 @@
       </div>
     </div>
 
+    <!-- ===== Modal: إضافة توصية ===== -->
+    <div v-if="showAddRecommendation" class="modal-overlay" @click.self="showAddRecommendation = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h3><i class="fas fa-lightbulb"></i> إضافة توصية جديدة</h3>
+          <button class="modal-close" @click="showAddRecommendation = false"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <!-- اختيار المستخدم -->
+          <div class="form-group full relative-parent">
+            <label>المستخدم *</label>
+            <div class="search-select-wrap">
+              <input
+                v-model="recUserSearch"
+                type="text"
+                placeholder="ابحث باسم الطالب أو رقمه الجامعي..."
+                class="search-input"
+                @focus="showRecUserDropdown = true"
+              />
+              <div v-if="showRecUserDropdown && !selectedRecUser" class="search-results-dropdown">
+                <div
+                  v-for="u in filteredRecUsers"
+                  :key="u.id"
+                  class="search-result-item"
+                  @click="selectRecUser(u)"
+                >
+                  <div class="fw-bold">{{ u.full_name }}</div>
+                  <div class="text-small text-muted">{{ u.university_number }}</div>
+                </div>
+                <div v-if="filteredRecUsers.length === 0" class="search-no-results">لا يوجد نتائج</div>
+              </div>
+              <div v-if="selectedRecUser" class="selected-item-tag">
+                <span><i class="fas fa-user"></i> {{ selectedRecUser.full_name }} ({{ selectedRecUser.university_number }})</span>
+                <button class="remove-tag" @click="selectedRecUser = null; showRecUserDropdown = true"><i class="fas fa-times"></i></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- اختيار الكتاب -->
+          <div class="form-group full relative-parent">
+            <label>الكتاب *</label>
+            <div class="search-select-wrap">
+              <input
+                v-model="recBookSearch"
+                type="text"
+                placeholder="ابحث باسم الكتاب..."
+                class="search-input"
+                @focus="showRecBookDropdown = true"
+              />
+              <div v-if="showRecBookDropdown && !selectedRecBook" class="search-results-dropdown">
+                <div
+                  v-for="b in filteredRecBooks"
+                  :key="b.id"
+                  class="search-result-item"
+                  @click="selectRecBook(b)"
+                >
+                  <div class="fw-bold">{{ b.title }}</div>
+                  <div class="text-small text-muted">{{ b.authors?.map(a => a.full_name).join(', ') }}</div>
+                </div>
+                <div v-if="filteredRecBooks.length === 0" class="search-no-results">لا يوجد نتائج</div>
+              </div>
+              <div v-if="selectedRecBook" class="selected-item-tag">
+                <span><i class="fas fa-book"></i> {{ selectedRecBook.title }}</span>
+                <button class="remove-tag" @click="selectedRecBook = null; showRecBookDropdown = true"><i class="fas fa-times"></i></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- التقييم و Score -->
+          <div class="form-row">
+            <div class="form-group">
+              <label>التقييم (Rating)</label>
+              <input v-model.number="newRecommendation.rating" type="number" min="0" max="5" step="1" placeholder="مثال: 4" />
+              <span class="field-hint"><i class="fas fa-info-circle"></i> تقييم المستخدم للكتاب من 0 إلى 5 نجوم</span>
+            </div>
+            <div class="form-group">
+              <label>درجة التوصية (Score)</label>
+              <input v-model.number="newRecommendation.score" type="number" min="0" max="1" step="0.01" placeholder="مثال: 0.85" />
+              <span class="field-hint"><i class="fas fa-info-circle"></i> مدى ملائمة الكتاب للمستخدم من 0.0 إلى 1.0</span>
+              <span class="field-hint" style="color: #e67e22; margin-top: 4px; display: block;">
+                <i class="fas fa-exclamation-triangle"></i> ملاحظة: التوصيات بدرجة أقل من 0.5 لن تظهر للطالب
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="showAddRecommendation = false">إلغاء</button>
+          <button
+            class="btn-save"
+            :disabled="!selectedRecUser || !selectedRecBook || savingRec"
+            @click="saveRecommendation"
+          >
+            <i class="fas fa-save"></i>
+            {{ savingRec ? 'جاري الحفظ...' : 'حفظ التوصية' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -1040,6 +1206,7 @@ import { bookService } from '../../api/bookService'
 import { loanService } from '../../api/loanService'
 import { userService } from '../../api/userService'
 import { faqService } from '../../api/faqService'
+import { recommendationService } from '../../api/recommendationService'
 import { listFromResponse } from '../../api/responseUtils'
 
 export default {
@@ -1164,6 +1331,23 @@ export default {
     const authors = ref([])
     const locations = ref([])
     const faqs = ref([])
+    const recommendations = ref([])
+
+    // Recommendations Data
+    const showAddRecommendation = ref(false)
+    const recSearch = ref('')
+    const recUserSearch = ref('')
+    const recBookSearch = ref('')
+    const selectedRecUser = ref(null)
+    const selectedRecBook = ref(null)
+    const showRecUserDropdown = ref(false)
+    const showRecBookDropdown = ref(false)
+    const savingRec = ref(false)
+
+    const newRecommendation = reactive({
+      rating: 0,
+      score: 0.0
+    })
 
     // Filters
     const bookSearch = ref('')
@@ -1249,6 +1433,102 @@ export default {
       return book?.copies?.some(c => c.status === 'AVAILABLE')
     }
 
+    // Recommendation Filters & Methods
+    const filteredRecUsers = computed(() => {
+      const q = recUserSearch.value.toLowerCase().trim()
+      const all = users.value || []
+      if (!q) return all.slice(0, 10)
+      return all.filter(u => 
+        u.full_name.toLowerCase().includes(q) || 
+        String(u.university_number).includes(q)
+      ).slice(0, 15)
+    })
+
+    const filteredRecBooks = computed(() => {
+      const q = recBookSearch.value.toLowerCase().trim()
+      const all = books.value || []
+      if (!q) return all.slice(0, 10)
+      return all.filter(b => 
+        b.title.toLowerCase().includes(q)
+      ).slice(0, 15)
+    })
+
+    const selectRecUser = (user) => {
+      selectedRecUser.value = user
+      recUserSearch.value = ''
+      showRecUserDropdown.value = false
+    }
+
+    const selectRecBook = (book) => {
+      selectedRecBook.value = book
+      recBookSearch.value = ''
+      showRecBookDropdown.value = false
+    }
+
+    const filteredRecommendations = computed(() => {
+      const q = recSearch.value.toLowerCase().trim()
+      return (recommendations.value || []).filter(rec => {
+        if (!q) return true
+        const userName = getRecUserName(rec).toLowerCase()
+        const bookTitle = getRecBookTitle(rec).toLowerCase()
+        return userName.includes(q) || bookTitle.includes(q)
+      })
+    })
+
+    const getRecUserName = (rec) => {
+      if (rec.user && rec.user.full_name) return rec.user.full_name
+      const user = (users.value || []).find(u => u.id === rec.user_id)
+      return user ? user.full_name : 'مستخدم مجهول'
+    }
+
+    const getRecBookTitle = (rec) => {
+      if (rec.book && rec.book.title) return rec.book.title
+      const book = (books.value || []).find(b => b.id === rec.book_id)
+      return book ? book.title : 'كتاب مجهول'
+    }
+
+    const saveRecommendation = async () => {
+      if (!selectedRecUser.value || !selectedRecBook.value) {
+        showToast('error', 'خطأ', 'يرجى اختيار المستخدم والكتاب')
+        return
+      }
+      savingRec.value = true
+      try {
+        await recommendationService.create({
+          user_id: selectedRecUser.value.id,
+          book_id: selectedRecBook.value.id,
+          rating: newRecommendation.rating || 0,
+          score: newRecommendation.score || 0
+        })
+        showToast('success', 'نجاح', 'تم إضافة التوصية بنجاح')
+        showAddRecommendation.value = false
+        // Reset form
+        selectedRecUser.value = null
+        selectedRecBook.value = null
+        newRecommendation.rating = 0
+        newRecommendation.score = 0.0
+        
+        const recsRes = await recommendationService.getAll()
+        recommendations.value = listFromResponse(recsRes)
+      } catch (err) {
+        showToast('error', 'خطأ', err.response?.data?.message || err.message)
+      } finally {
+        savingRec.value = false
+      }
+    }
+
+    const deleteRecommendation = async (rec) => {
+      if (!confirm('هل أنت متأكد من حذف هذه التوصية؟')) return
+      try {
+        await recommendationService.delete(rec.id)
+        showToast('success', 'نجاح', 'تم الحذف بنجاح')
+        const recsRes = await recommendationService.getAll()
+        recommendations.value = listFromResponse(recsRes)
+      } catch (err) {
+        showToast('error', 'خطأ', 'فشل الحذف')
+      }
+    }
+
     const calculatedDueDate = computed(() => {
       const d = new Date()
       d.setDate(d.getDate() + 14) // Default 14 days
@@ -1257,15 +1537,16 @@ export default {
 
     // Menu Items
     const menuItems = [
-      { key: 'overview',   label: 'نظرة عامة',     icon: 'fas fa-chart-pie' },
-      { key: 'books',      label: 'إدارة الكتب',   icon: 'fas fa-book' },
-      { key: 'categories', label: 'التصنيفات',     icon: 'fas fa-tags' },
-      { key: 'publishers', label: 'الناشرون',      icon: 'fas fa-building' },
-      { key: 'locations',  label: 'المواقع',       icon: 'fas fa-map-marker-alt' },
-      { key: 'loans',      label: 'الاستعارات',    icon: 'fas fa-exchange-alt' },
-      { key: 'users',      label: 'المستخدمون',    icon: 'fas fa-users' },
-      { key: 'fines',      label: 'الغرامات',      icon: 'fas fa-coins' },
-      { key: 'faq',        label: 'الأسئلة الشائعة',icon: 'fas fa-question-circle' },
+      { key: 'overview',         label: 'نظرة عامة',       icon: 'fas fa-chart-pie' },
+      { key: 'books',            label: 'إدارة الكتب',     icon: 'fas fa-book' },
+      { key: 'categories',       label: 'التصنيفات',       icon: 'fas fa-tags' },
+      { key: 'publishers',       label: 'الناشرون',        icon: 'fas fa-building' },
+      { key: 'locations',        label: 'المواقع',         icon: 'fas fa-map-marker-alt' },
+      { key: 'loans',            label: 'الاستعارات',      icon: 'fas fa-exchange-alt' },
+      { key: 'users',            label: 'المستخدمون',      icon: 'fas fa-users' },
+      { key: 'fines',            label: 'الغرامات',        icon: 'fas fa-coins' },
+      { key: 'recommendations',  label: 'التوصيات',        icon: 'fas fa-lightbulb' },
+      { key: 'faq',              label: 'الأسئلة الشائعة', icon: 'fas fa-question-circle' },
     ]
 
     const refreshBookLookups = async () => {
@@ -1337,6 +1618,13 @@ export default {
         const faqsRes = await faqService.getAll()
         faqs.value = listFromResponse(faqsRes)
 
+        try {
+          const recsRes = await recommendationService.getAll()
+          recommendations.value = listFromResponse(recsRes)
+        } catch (e) {
+          console.error('Error fetching recommendations:', e)
+        }
+
         recomputeStats()
         await refreshBookLookups()
       } catch (err) {
@@ -1348,7 +1636,7 @@ export default {
 
     // Watch for tab changes to refresh specific data
     watch(activeTab, (newTab) => {
-      if (newTab === 'overview') fetchData()
+      if (newTab === 'overview' || newTab === 'recommendations') fetchData()
     })
 
     // Computed Filters
@@ -1989,7 +2277,11 @@ export default {
       bookSearchInModal, selectedBookInModal, showBookDropdown,
       filteredUsersForModal, filteredBooksForModal,
       selectUserForModal, selectBookForModal, isBookAvailable, calculatedDueDate,
-      toast, showToast
+      toast, showToast,
+      recommendations, showAddRecommendation, recSearch, recUserSearch, recBookSearch,
+      selectedRecUser, selectedRecBook, showRecUserDropdown, showRecBookDropdown, savingRec,
+      newRecommendation, filteredRecUsers, filteredRecBooks, selectRecUser, selectRecBook,
+      filteredRecommendations, getRecUserName, getRecBookTitle, saveRecommendation, deleteRecommendation
     }
   }
 }

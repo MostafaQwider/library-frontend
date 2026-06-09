@@ -71,23 +71,57 @@
           </button>
         </div>
 
-        <!-- Featured Book (only when no search) -->
-        <div class="featured-section" v-if="!searchQuery && selectedCategory === 'all' && featuredBook">
+        <!-- Featured Book(s) (only when no search) -->
+        <div class="featured-section" v-if="!searchQuery && selectedCategory === 'all' && featuredBooks.length > 0">
           <div class="featured-label"><i class="fas fa-star"></i> مقترحات ذكية لك</div>
-          <div class="featured-card">
-            <img :src="'http://127.0.0.1:5000'+featuredBook.cover_image_url || 'https://via.placeholder.com/400x300?text=No+Cover'" alt="featured" class="featured-img" />
+          
+          <div v-if="featuredBooks.length === 1" class="featured-card">
+            <img :src="'http://127.0.0.1:5000'+featuredBooks[0].cover_image_url || 'https://via.placeholder.com/400x300?text=No+Cover'" alt="featured" class="featured-img" />
             <div class="featured-info">
-              <span class="featured-category">{{ featuredBook.category?.name }}</span>
-              <h2 class="featured-title">{{ featuredBook.title }}</h2>
-              <p class="featured-author"><i class="fas fa-user-edit"></i> {{ featuredBook.authors?.map(a => a.full_name).join(', ') }}</p>
-              <p class="featured-desc">{{ featuredBook.summary }}</p>
+              <span class="featured-category">{{ featuredBooks[0].category?.name }}</span>
+              <h2 class="featured-title">{{ featuredBooks[0].title }}</h2>
+              <p class="featured-author"><i class="fas fa-user-edit"></i> {{ featuredBooks[0].authors?.map(a => a.full_name).join(', ') }}</p>
+              <p class="featured-desc">{{ featuredBooks[0].summary }}</p>
               <div class="featured-actions">
-                <button class="btn-primary" @click="bookNow(featuredBook)">
+                <button class="btn-primary" @click="bookNow(featuredBooks[0])">
                   <i class="fas fa-bookmark"></i> احجز الآن
                 </button>
-                <button class="btn-secondary" @click="viewDetails(featuredBook)">
+                <button class="btn-secondary" @click="viewDetails(featuredBooks[0])">
                   إلقاء نظرة
                 </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="books-grid" style="margin-bottom: 20px;">
+            <div
+              v-for="book in featuredBooks"
+              :key="'feat-'+book.id"
+              class="book-card"
+            >
+              <div class="book-image-wrapper">
+                <img :src="'http://127.0.0.1:5000'+book.cover_image_url || 'https://via.placeholder.com/200x140?text=No+Cover'" :alt="book.title" class="book-img" />
+                <span class="book-category-badge">{{ book.category?.name }}</span>
+              </div>
+              <div class="book-body">
+                <h4 class="book-title">{{ book.title }}</h4>
+                <p class="book-author"><i class="fas fa-pen-nib"></i> {{ book.authors?.map(a => a.full_name).join(', ') }}</p>
+                <div class="book-footer">
+                  <span :class="['availability', book.copies?.some(c => c.status === 'AVAILABLE') ? 'available' : 'unavailable']">
+                    <i :class="book.copies?.some(c => c.status === 'AVAILABLE') ? 'fas fa-check-circle' : 'fas fa-clock'"></i>
+                    {{ book.copies?.some(c => c.status === 'AVAILABLE') ? 'متاح للاستعارة' : 'غير متوفر حالياً' }}
+                  </span>
+                  <button class="details-btn" @click="viewDetails(book)">
+                    <i class="fas fa-eye"></i> عرض التفاصيل
+                  </button>
+                  <button
+                    class="reserve-btn"
+                    :disabled="!book.copies?.some(c => c.status === 'AVAILABLE')"
+                    @click="bookNow(book)"
+                  >
+                    {{ book.copies?.some(c => c.status === 'AVAILABLE') ? 'احجز الآن' : 'محجوز' }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -153,6 +187,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../store/authStore'
 import { bookService } from '../../api/bookService'
 import { loanService } from '../../api/loanService'
+import { recommendationService } from '../../api/recommendationService'
 import { listFromResponse } from '../../api/responseUtils'
 
 export default {
@@ -166,8 +201,19 @@ export default {
     const books = ref([])
     const categories = ref([{ label: 'الكل', value: 'all', icon: 'fas fa-layer-group' }])
     const loading = ref(false)
+    const userRecommendations = ref([])
 
-    const featuredBook = computed(() => books.value?.[0] || null)
+    const featuredBooks = computed(() => {
+      // إذا كان لدى الطالب توصيات، يتم فلترتها بحيث لا تظهر إلا التوصيات ذات سكور أعلى من أو يساوي 0.5
+      if (userRecommendations.value && userRecommendations.value.length > 0) {
+        const filteredRecs = userRecommendations.value.filter(rec => (rec.score || 0) >= 0.5)
+        if (filteredRecs.length > 0) {
+          return filteredRecs.map(rec => rec.book).filter(b => b)
+        }
+      }
+      // إذا لم يكن هناك توصيات بسكور مناسب، نعرض أول كتاب كخيار افتراضي
+      return books.value && books.value.length > 0 ? [books.value[0]] : []
+    })
 
     const fetchCategories = async () => {
       try {
@@ -208,7 +254,18 @@ export default {
     onMounted(() => {
       fetchCategories()
       fetchBooks()
+      fetchRecommendations()
     })
+
+    const fetchRecommendations = async () => {
+      if (!authStore.user?.id) return
+      try {
+        const res = await recommendationService.getByUser(authStore.user.id)
+        userRecommendations.value = listFromResponse(res)
+      } catch (err) {
+        console.error('Error fetching recommendations:', err)
+      }
+    }
 
     watch([searchQuery, selectedCategory, showAvailableOnly], () => {
       fetchBooks()
@@ -252,7 +309,7 @@ export default {
 
     return {
       searchQuery, selectedCategory, showAvailableOnly, categories, 
-      featuredBook, loading, filteredBooks, 
+      featuredBooks, loading, filteredBooks, 
       getCategoryCount, viewDetails, bookNow, logout
     }
   }

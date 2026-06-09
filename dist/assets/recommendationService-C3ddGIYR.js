@@ -1,0 +1,1 @@
+import{z as r}from"./index-DXAt6a69.js";const n={getAll(){return r.get("/recommendations")},getByUser(e){return r.get(`/recommendations/user/${e}`)},create(e){return r.post("/recommendations",e)},delete(e){return r.delete(`/recommendations/${e}`)}};export{n as r};
